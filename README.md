@@ -14,7 +14,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-JSON writes work with `npm run dev` and `npm start`. Serverless hosts such as Vercel have a read-only filesystem, so writes will not persist there. That is expected until a database is added.
+JSON writes work with `npm run dev` and `npm start`. Serverless hosts such as Vercel have a read-only filesystem. The site still opens there from the demo library, and changes last only for that server instance. Set `AUTH_SECRET` in the host's environment before deploying.
 
 ## Demo logins
 

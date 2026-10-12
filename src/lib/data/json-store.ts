@@ -37,10 +37,34 @@ export function transaction<T>(task: () => Promise<T>): Promise<T> {
 }
 
 let seedCache: Promise<SeedData> | null = null;
+let memoryMode = false;
+const memory = new Map<string, unknown>();
 
 function seedData() {
   seedCache ??= buildSeedData();
   return seedCache;
+}
+
+function readOnlyError(error: unknown) {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "EROFS" || code === "EACCES" || code === "EPERM" || code === "ENOSPC" || code === "ENOTDIR";
+}
+
+async function rememberSeed() {
+  const seed = await seedData();
+  for (const key of Object.keys(seed) as (keyof SeedData)[]) {
+    if (!memory.has(key)) memory.set(key, structuredClone(seed[key]));
+  }
+}
+
+function fromMemory<T>(name: string): T {
+  return structuredClone(memory.get(name)) as T;
+}
+
+async function useMemory(name: string, data?: unknown) {
+  memoryMode = true;
+  await rememberSeed();
+  if (data !== undefined) memory.set(name, structuredClone(data));
 }
 
 async function writeAtomic(file: string, data: unknown) {
@@ -50,30 +74,60 @@ async function writeAtomic(file: string, data: unknown) {
   await fs.rename(tmp, file);
 }
 
-async function readRawCollection<T>(name: CollectionName): Promise<T[]> {
-  const file = filePath(name);
+async function saveFile(name: string, data: unknown) {
+  if (memoryMode) {
+    memory.set(name, structuredClone(data));
+    return;
+  }
   try {
-    const raw = await fs.readFile(file, "utf8");
+    await writeAtomic(filePath(name), data);
+  } catch (error) {
+    if (!readOnlyError(error)) throw error;
+    await useMemory(name, data);
+  }
+}
+
+async function readRawCollection<T>(name: CollectionName): Promise<T[]> {
+  if (memoryMode) {
+    await rememberSeed();
+    return fromMemory<T[]>(name);
+  }
+  try {
+    const raw = await fs.readFile(filePath(name), "utf8");
     return JSON.parse(raw) as T[];
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      if (!readOnlyError(error)) throw error;
+      await useMemory(name);
+      return fromMemory<T[]>(name);
+    }
     const seed = await seedData();
-    const rows = seed[name] as T[];
-    await writeAtomic(file, rows);
-    return rows;
+    const rows = structuredClone(seed[name]) as T[];
+    await saveFile(name, rows);
+    return memoryMode ? fromMemory<T[]>(name) : rows;
   }
 }
 
 async function readRawDocument<T>(): Promise<T> {
-  const file = filePath("settings");
+  if (memoryMode) {
+    await rememberSeed();
+    return fromMemory<T>("settings");
+  }
   try {
-    const raw = await fs.readFile(file, "utf8");
+    const raw = await fs.readFile(filePath("settings"), "utf8");
     return JSON.parse(raw) as T;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      if (!readOnlyError(error)) throw error;
+      await useMemory("settings");
+      return fromMemory<T>("settings");
+    }
     const seed = await seedData();
-    await writeAtomic(file, seed.settings);
-    return seed.settings as T;
+    const settings = structuredClone(seed.settings) as T;
+    await saveFile("settings", settings);
+    return memoryMode ? fromMemory<T>("settings") : settings;
   }
 }
 
@@ -83,7 +137,7 @@ export function readCollection<T>(name: CollectionName): Promise<T[]> {
 
 export function writeCollection<T>(name: CollectionName, data: T[]): Promise<void> {
   return locked(async () => {
-    await writeAtomic(filePath(name), data);
+    await saveFile(name, data);
   });
 }
 
@@ -94,7 +148,7 @@ export function updateCollection<T>(
   return locked(async () => {
     const rows = await readRawCollection<T>(name);
     const next = await mutator(rows);
-    await writeAtomic(filePath(name), next);
+    await saveFile(name, next);
     return next;
   });
 }
@@ -105,16 +159,21 @@ export function readDocument<T>(): Promise<T> {
 
 export function writeDocument<T>(data: T): Promise<void> {
   return locked(async () => {
-    await writeAtomic(filePath("settings"), data);
+    await saveFile("settings", data);
   });
 }
 
 export async function resetAll(data: SeedData): Promise<void> {
   await locked(async () => {
-    await fs.mkdir(dataDir(), { recursive: true });
+    try {
+      if (!memoryMode) await fs.mkdir(dataDir(), { recursive: true });
+    } catch (error) {
+      if (!readOnlyError(error)) throw error;
+      memoryMode = true;
+    }
     const names = Object.keys(data) as (keyof SeedData)[];
     for (const name of names) {
-      await writeAtomic(filePath(name), data[name]);
+      await saveFile(name, data[name]);
     }
   });
 }
