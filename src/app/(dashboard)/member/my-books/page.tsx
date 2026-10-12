@@ -30,7 +30,7 @@ export default async function MyBooksPage() {
             </div>
             <div className="flex items-center gap-2">
               <StatusBadge status={dueTone(issue.dueDate) === "overdue" ? "overdue" : dueTone(issue.dueDate) === "soon" ? "due" : "issued"} />
-              <ActionButton label="Renew" disabled={!issue.canRenew} action={renewIssueAction.bind(null, issue.id)} />
+              <ActionButton label="Renew" disabled={!issue.canRenew} action={renewIssueAction} id={issue.id} />
             </div>
           </article>
         ))}

@@ -45,9 +45,14 @@ function seedData() {
   return seedCache;
 }
 
-function readOnlyError(error: unknown) {
+function diskFailure(error: unknown): "missing" | "fallback" | "fatal" {
+  if (error instanceof SyntaxError) return "fatal";
   const code = (error as NodeJS.ErrnoException).code;
-  return code === "EROFS" || code === "EACCES" || code === "EPERM" || code === "ENOSPC" || code === "ENOTDIR";
+  if (code === "ENOENT") return "missing";
+  if (typeof code === "string") return "fallback";
+  const message = error instanceof Error ? error.message : "";
+  if (/read-only|EROFS|EACCES|ENOTDIR|not implemented|dynamic require/i.test(message)) return "fallback";
+  return "fatal";
 }
 
 async function rememberSeed() {
@@ -82,7 +87,7 @@ async function saveFile(name: string, data: unknown) {
   try {
     await writeAtomic(filePath(name), data);
   } catch (error) {
-    if (!readOnlyError(error)) throw error;
+    if (diskFailure(error) !== "fallback") throw error;
     await useMemory(name, data);
   }
 }
@@ -96,9 +101,9 @@ async function readRawCollection<T>(name: CollectionName): Promise<T[]> {
     const raw = await fs.readFile(filePath(name), "utf8");
     return JSON.parse(raw) as T[];
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT") {
-      if (!readOnlyError(error)) throw error;
+    const kind = diskFailure(error);
+    if (kind === "fatal") throw error;
+    if (kind === "fallback") {
       await useMemory(name);
       return fromMemory<T[]>(name);
     }
@@ -118,9 +123,9 @@ async function readRawDocument<T>(): Promise<T> {
     const raw = await fs.readFile(filePath("settings"), "utf8");
     return JSON.parse(raw) as T;
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT") {
-      if (!readOnlyError(error)) throw error;
+    const kind = diskFailure(error);
+    if (kind === "fatal") throw error;
+    if (kind === "fallback") {
       await useMemory("settings");
       return fromMemory<T>("settings");
     }
@@ -168,7 +173,7 @@ export async function resetAll(data: SeedData): Promise<void> {
     try {
       if (!memoryMode) await fs.mkdir(dataDir(), { recursive: true });
     } catch (error) {
-      if (!readOnlyError(error)) throw error;
+      if (diskFailure(error) === "fatal") throw error;
       memoryMode = true;
     }
     const names = Object.keys(data) as (keyof SeedData)[];

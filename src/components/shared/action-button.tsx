@@ -9,11 +9,13 @@ import type { ActionResult } from "@/types";
 export function ActionButton({
   label,
   action,
+  id,
   variant = "outline",
   disabled,
 }: {
   label: string;
-  action: () => Promise<ActionResult>;
+  action: ((id: string) => Promise<ActionResult>) | (() => Promise<ActionResult>);
+  id?: string;
   variant?: "outline" | "default" | "secondary" | "destructive";
   disabled?: boolean;
 }) {
@@ -24,7 +26,10 @@ export function ActionButton({
       disabled={disabled || pending}
       onClick={async () => {
         setPending(true);
-        const result = await action();
+        const result =
+          id === undefined
+            ? await (action as () => Promise<ActionResult>)()
+            : await (action as (value: string) => Promise<ActionResult>)(id);
         setPending(false);
         if (result.success) toast.success(result.message);
         else toast.error(result.message);

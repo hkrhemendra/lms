@@ -1,4 +1,4 @@
-import bcrypt from "bcryptjs";
+import { hashSync } from "bcryptjs";
 import { DEFAULT_SETTINGS } from "@/lib/constants";
 import { addDays, todayDate } from "@/lib/dates";
 import type {
@@ -148,7 +148,7 @@ export async function buildSeedData(now = new Date()): Promise<SeedData> {
       id: userId,
       name: person.name,
       email: person.email,
-      passwordHash: bcrypt.hashSync(person.password, 8),
+      passwordHash: hashSync(person.password, 8),
       role: person.role,
       status: "active",
       createdAt,

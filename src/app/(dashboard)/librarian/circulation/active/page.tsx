@@ -63,7 +63,7 @@ export default async function ActiveLoansPage() {
                   </td>
                   <td className="p-3">
                     <div className="flex flex-wrap gap-2">
-                      <ActionButton label="Renew" action={renewIssueAction.bind(null, issue.id)} />
+                      <ActionButton label="Renew" action={renewIssueAction} id={issue.id} />
                       <Link className="text-sm text-primary underline-offset-4 hover:underline" href={`/librarian/circulation/return?issue=${issue.id}`}>
                         Return
                       </Link>

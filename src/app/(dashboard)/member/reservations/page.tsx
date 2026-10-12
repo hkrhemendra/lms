@@ -31,7 +31,7 @@ export default async function MemberReservationsPage() {
             </div>
             <div className="flex items-center gap-2">
               <StatusBadge status={row.status} />
-              <ActionButton label="Cancel" variant="outline" action={cancelReservationAction.bind(null, row.id)} />
+              <ActionButton label="Cancel" variant="outline" action={cancelReservationAction} id={row.id} />
             </div>
           </li>
         ))}

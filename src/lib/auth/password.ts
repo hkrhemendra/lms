@@ -1,10 +1,10 @@
 import "server-only";
-import bcrypt from "bcryptjs";
+import { compare, hash } from "bcryptjs";
 
 export function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10);
+  return hash(password, 10);
 }
 
 export function verifyPassword(password: string, passwordHash: string): Promise<boolean> {
-  return bcrypt.compare(password, passwordHash);
+  return compare(password, passwordHash);
 }

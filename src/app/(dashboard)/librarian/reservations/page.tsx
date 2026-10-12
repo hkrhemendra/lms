@@ -70,7 +70,7 @@ export default async function ReservationsPage() {
                     <StatusBadge status={row.status} />
                   </td>
                   <td className="p-3">
-                    <ActionButton label="Cancel" variant="outline" action={cancelReservationAction.bind(null, row.id)} />
+                    <ActionButton label="Cancel" variant="outline" action={cancelReservationAction} id={row.id} />
                   </td>
                 </tr>
               );
